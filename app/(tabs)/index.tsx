@@ -1,11 +1,12 @@
 import React, {useEffect, useState} from 'react';
 import {Image, StyleSheet, View, Text, ActivityIndicator} from 'react-native';
 import {useRoute} from '@react-navigation/native';
+import * as FileSystem from 'expo-file-system';
 
 export default function HomeScreen() {
   const route = useRoute();
   const {barcodeData, photo} = route.params || {};
-  const [itemName, setItemName] = useState(null);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,27 +18,44 @@ export default function HomeScreen() {
       setLoading(true);
 
       try {
-        const formData = new FormData();
-
-        if (barcodeData) {
-          formData.append('barcode', barcodeData);
-        }
+        let base64Image = null;
 
         if (photo) {
-          formData.append('image', {
-            uri: photo.uri,
-            type: 'image/jpeg',
-            name: 'photo.jpg',
-          });
+          base64Image = await FileSystem.readAsStringAsync(photo.uri, { encoding: FileSystem?.EncodingType?.Base64 });
         }
 
-        setTimeout(() => {
-          const mockResult = {
-            itemName: 'Sample Item Name',
-          };
-          setItemName(mockResult.itemName);
-          setLoading(false);
-        }, 2000);
+        const barcodes = barcodeData ? [barcodeData] : [];
+        const requestBody = {
+          image: base64Image,
+          barcodes: barcodes,
+        };
+
+        const response = await fetch(
+            'https://nutrieye-backend-production.up.railway.app/analyze',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+            },
+        );
+
+        if (!response.ok) {
+          //print body
+            console.log(await response.text());
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data && data.result && data.result.items) {
+          setItems(data.result.items);
+        } else {
+          setItems([]);
+        }
+
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching item data:', error);
         setLoading(false);
@@ -50,7 +68,7 @@ export default function HomeScreen() {
   if (loading) {
     return (
         <View style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color="#ffffff"/>
+          <ActivityIndicator size="large" color="#ffffff" />
           <Text style={styles.loadingText}>Fetching item data...</Text>
         </View>
     );
@@ -58,11 +76,18 @@ export default function HomeScreen() {
 
   return (
       <View style={styles.centeredContainer}>
-        {itemName ? (
+        {items.length > 0 ? (
             <>
-              <Text style={styles.itemName}>Item Name: {itemName}</Text>
+              {items.map((item, index) => (
+                  <View key={index} style={styles.itemContainer}>
+                    <Text style={styles.itemName}>Item Name: {item.name}</Text>
+                    <Text style={styles.itemCalories}>
+                      Calories: {item.calories}
+                    </Text>
+                  </View>
+              ))}
               {photo && (
-                  <Image source={{uri: photo.uri}} style={styles.capturedImage}/>
+                  <Image source={{uri: photo.uri}} style={styles.capturedImage} />
               )}
               {barcodeData && (
                   <Text style={styles.barcodeData}>Barcode Data: {barcodeData}</Text>
@@ -82,10 +107,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#121212',
   },
+  itemContainer: {
+    marginBottom: 16,
+  },
   itemName: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 16,
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  itemCalories: {
+    fontSize: 18,
     color: '#ffffff',
     textAlign: 'center',
   },
