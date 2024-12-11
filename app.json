@@ -44,7 +44,8 @@
           "microphonePermissionText": "$(PRODUCT_NAME) needs access to your Microphone."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true
